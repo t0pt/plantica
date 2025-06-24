@@ -46,32 +46,121 @@ func (r *Renderer) RenderColumns(amount int) {
 	fmt.Print(field)
 }
 
-func (r *Renderer) RenderCalendar(days int, focusDate *events.Date) {
+func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusRow int) {
 	ClearAll()
-	field := make([]string, 0, r.Terminal.Height)
-	columnWindth := int(r.Terminal.Width / days)
-	header := "\r"
+	field := []Column{}
+
+	timeLine := Column{
+		Width: 9,
+		Cells: generateTimeLine(),
+	}
+
+	dayColumns := []Column{}
 	for i := 0; i < days; i++ {
-		dateStr := focusDate.AddDays(i - 1).String()
-		if len(dateStr) > (columnWindth - 2) {
-			dateStr = dateStr[:columnWindth-3]
+		dayColumns = append(dayColumns,
+			Column{
+				Name:  focusDate.AddDays(i - 1).String(),
+				Cells: []Cell{},
+			})
+	}
+
+	field = append(field, timeLine)
+	field = append(field, dayColumns...)
+
+	dedicatedWidth := 0 // distribue free space between columns without width
+	notDedicatedIds := []int{}
+	for i := 0; i < len(field); i++ {
+		if field[i].Width > 2 {
+			dedicatedWidth += field[i].Width
+		} else {
+			notDedicatedIds = append(notDedicatedIds, i)
 		}
-		header += "|" + SideSpacers(dateStr, columnWindth-2) + "|"
 	}
-	header += "\n"
-	field = append(field, header)
-	field = append(field, "\r"+strings.Repeat("—", r.Terminal.Width)+"\n")
-	column := "|" + strings.Repeat(" ", columnWindth-2) + "|"
-	line := "\r" + strings.Repeat(column, days) + "\n"
-	rest := r.Terminal.Height - len(field) - 1
-	for i := 0; i < rest; i++ {
-		field = append(field, line)
+	spacePerColumn := (r.Terminal.Width - dedicatedWidth) / len(notDedicatedIds)
+	for i := 0; i < len(notDedicatedIds); i++ {
+		field[notDedicatedIds[i]].Width = spacePerColumn
 	}
-	fmt.Print(strings.Join(field, ""))
+
+	cellMatrix := [][]Cell{}
+	heightRow := map[int]int{} // contains height of each row
+	for i := 0; i < len(field); i++ {
+		cellMatrix = append(cellMatrix, field[i].Cells)
+		for j := 0; j < len(field[i].Cells); j++ {
+			if heightRow[j] < field[i].Cells[j].Height {
+				heightRow[j] = field[i].Cells[j].Height
+			}
+		}
+	}
+
+	sumHeights := 0
+	currentRow := 0
+	lines := make([]string, r.Terminal.Height-1)
+	for i := 0; i < len(lines); i++ {
+		lines[i] = "\r"
+	}
+	for lin := 0; lin < len(lines); lin++ {
+		newRow := false
+		divider := false
+		if lin-1 == sumHeights { // divider
+			divider = true
+		} else if lin-1 > sumHeights { // start new row
+			newRow = true
+			currentRow += 1
+			sumHeights += heightRow[currentRow]
+		}
+		for col := 0; col < len(field); col++ {
+			if lin == 0 { // header
+				lines[lin] += "|" + SideSpacers(field[col].Name, field[col].Width-2) + "|"
+			} else if lin == 1 { // divider
+				lines[lin] += strings.Repeat("—", field[col].Width)
+			} else { // body
+				if divider { // divider
+					lines[lin] += strings.Repeat("—", field[col].Width)
+				} else if newRow { // start new row
+					if len(cellMatrix) >= col && len(cellMatrix[col]) >= currentRow {
+						lines[lin] += "|" + SideSpacers(cellMatrix[col][currentRow-1].Name, field[col].Width-2) + "|"
+					} else {
+						lines[lin] += "|" + strings.Repeat(" ", field[col].Width-2) + "|"
+					}
+				} else {
+					lines[lin] += "|" + strings.Repeat(" ", field[col].Width-2) + "|"
+				}
+			}
+		}
+	}
+	for i := 0; i < len(lines); i++ {
+		lines[i] += "\n"
+	}
+
+	fmt.Print(strings.Join(lines, ""))
 }
 
 func SideSpacers(input string, length int) string {
+	if len(input) >= length {
+		return input[:length]
+	}
 	return strings.Repeat(" ", int((length-len(input))/2)) + input +
 		strings.Repeat(" ", int((length-len(input))/2)) +
 		strings.Repeat(" ", (length-len(input))%2)
+}
+
+func generateTimeLine() []Cell {
+	toRet := []Cell{}
+	for i := 6; i != 5; i++ {
+		if i == 24 {
+			i = 0
+		}
+		hours := ""
+		if i < 10 {
+			hours = fmt.Sprintf("0%d", i)
+		} else {
+			hours = fmt.Sprintf("%d", i)
+		}
+		toRet = append(toRet,
+			Cell{
+				Name:   hours + ":00",
+				Height: 3,
+			})
+	}
+	return toRet
 }

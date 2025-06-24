@@ -13,7 +13,7 @@ func main() {
 		Terminal: mainTerm,
 	}
 	today := events.TodayDate()
-	renderer.RenderCalendar(5, &today)
+	renderer.RenderCalendar(5, &today, 0)
 	mainTerm.EnableRaw()
 	mainTerm.Listen()
 	mainTerm.DisableRaw()
