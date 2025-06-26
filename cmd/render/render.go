@@ -22,6 +22,17 @@ type Cell struct {
 	Name        string
 	Height      int
 	Description string
+	Time        int
+}
+
+type LineTime struct {
+	Name string
+	Time int
+}
+
+type TimeLine struct {
+	Times []LineTime
+	Width int
 }
 
 func (r *Renderer) RenderSquare() {
@@ -46,14 +57,10 @@ func (r *Renderer) RenderColumns(amount int) {
 	fmt.Print(field)
 }
 
-func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusRow int) {
+func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusTime int) {
 	ClearAll()
-	field := []Column{}
 
-	timeLine := Column{
-		Width: 9,
-		Cells: generateTimeLine(),
-	}
+	timeLine := generateTimeLine(6, 20)
 
 	dayColumns := []Column{}
 	for i := 0; i < days; i++ {
@@ -63,75 +70,113 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusRow int
 				Cells: []Cell{},
 			})
 	}
+	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "skibidi", Time: 8})
+	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "skibidii", Time: 8})
+	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "pididi", Time: 8})
+	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "skibidi", Time: 3})
+	dayColumns[3].Cells = append(dayColumns[3].Cells, Cell{Name: "skibidi", Time: 10})
+	dayColumns[4].Cells = append(dayColumns[4].Cells, Cell{Name: "skibidi", Time: 12})
 
-	field = append(field, timeLine)
-	field = append(field, dayColumns...)
-
-	dedicatedWidth := 0 // distribue free space between columns without width
+	dedicatedWidth := timeLine.Width // distribue free space between columns without width
 	notDedicatedIds := []int{}
-	for i := 0; i < len(field); i++ {
-		if field[i].Width > 2 {
-			dedicatedWidth += field[i].Width
+	for i := 0; i < len(dayColumns); i++ {
+		if dayColumns[i].Width != 0 {
+			dedicatedWidth += dayColumns[i].Width
 		} else {
 			notDedicatedIds = append(notDedicatedIds, i)
 		}
 	}
 	spacePerColumn := (r.Terminal.Width - dedicatedWidth) / len(notDedicatedIds)
 	for i := 0; i < len(notDedicatedIds); i++ {
-		field[notDedicatedIds[i]].Width = spacePerColumn
+		dayColumns[notDedicatedIds[i]].Width = spacePerColumn
 	}
 
-	cellMatrix := [][]Cell{}
-	heightRow := map[int]int{} // contains height of each row
-	for i := 0; i < len(field); i++ {
-		cellMatrix = append(cellMatrix, field[i].Cells)
-		for j := 0; j < len(field[i].Cells); j++ {
-			if heightRow[j] < field[i].Cells[j].Height {
-				heightRow[j] = field[i].Cells[j].Height
+	rowCells := map[int][][]Cell{} // map[time][column][index in this time] = Cell
+	for i := 6; len(rowCells) < 20; i++ {
+		if i == 24 {
+			i = 0
+		}
+		rowCells[i] = [][]Cell{}
+		for j := 0; j < 5; j++ {
+			rowCells[i] = append(rowCells[i], []Cell{})
+		}
+	}
+	for j := 0; j < 5; j++ {
+		rowCells[-1] = append(rowCells[-1], []Cell{})
+	}
+	for day, column := range dayColumns {
+		for _, cell := range column.Cells {
+			if cell.Time < 6 && cell.Time > 2 || cell.Time > 23 { // if the time in cell is not to be displayed => to the pending
+				cell.Time = -1
+			}
+			rowCells[cell.Time][day] = append(rowCells[cell.Time][day], cell)
+		}
+	}
+
+	lines := []string{}
+	line := "\r|" + strings.Repeat(" ", timeLine.Width-2) + "|" // header
+	for _, column := range dayColumns {
+		line += "|" + SideSpacers(column.Name, column.Width-2) + "|"
+	}
+	line += "\n"
+	lines = append(lines, line)
+	line = "\r" + strings.Repeat("—", r.Terminal.Width) + "\n" // divider
+	lines = append(lines, line)
+
+	lineBefore := false
+	// real business
+	for _, lineTime := range timeLine.Times {
+		if len(lines) >= r.Terminal.Height-1 {
+			break
+		}
+		maxLines := 1 // max events in one time
+		eventsExist := false
+		for _, cells := range rowCells[lineTime.Time] {
+			if len(cells) > maxLines {
+				maxLines = len(cells)
+			}
+			if len(cells) > 0 {
+				eventsExist = true
 			}
 		}
-	}
-
-	sumHeights := 0
-	currentRow := 0
-	lines := make([]string, r.Terminal.Height-1)
-	for i := 0; i < len(lines); i++ {
-		lines[i] = "\r"
-	}
-	for lin := 0; lin < len(lines); lin++ {
-		newRow := false
-		divider := false
-		if lin-1 == sumHeights { // divider
-			divider = true
-		} else if lin-1 > sumHeights { // start new row
-			newRow = true
-			currentRow += 1
-			sumHeights += heightRow[currentRow]
+		linesInRow := make([]string, 0, maxLines)
+		for i := range maxLines {
+			if i == 0 {
+				linesInRow = append(linesInRow, "\r|"+SideSpacers(lineTime.Name, timeLine.Width-2)+"|") // starts with linetime
+			} else {
+				linesInRow = append(linesInRow, "\r"+strings.Repeat(" ", timeLine.Width))
+			}
 		}
-		for col := 0; col < len(field); col++ {
-			if lin == 0 { // header
-				lines[lin] += "|" + SideSpacers(field[col].Name, field[col].Width-2) + "|"
-			} else if lin == 1 { // divider
-				lines[lin] += strings.Repeat("—", field[col].Width)
-			} else { // body
-				if divider { // divider
-					lines[lin] += strings.Repeat("—", field[col].Width)
-				} else if newRow { // start new row
-					if len(cellMatrix) >= col && len(cellMatrix[col]) >= currentRow {
-						lines[lin] += "|" + SideSpacers(cellMatrix[col][currentRow-1].Name, field[col].Width-2) + "|"
-					} else {
-						lines[lin] += "|" + strings.Repeat(" ", field[col].Width-2) + "|"
-					}
-				} else {
-					lines[lin] += "|" + strings.Repeat(" ", field[col].Width-2) + "|"
+		for line := range maxLines {
+			if _, ok := rowCells[lineTime.Time]; !ok { // no events at this time at all
+				for day := range len(dayColumns) {
+					linesInRow[line] += "|" + strings.Repeat(" ", dayColumns[day].Width-2) + "|"
 				}
+				continue
+			}
+			for day := range len(dayColumns) {
+				if len(rowCells[lineTime.Time][day])-1 < line {
+					linesInRow[line] += "|" + strings.Repeat(" ", dayColumns[day].Width-2) + "|"
+					continue
+				}
+				cell := rowCells[lineTime.Time][day][line]
+				linesInRow[line] += "|" + SideSpacers(cell.Name, dayColumns[day].Width-2) + "|"
 			}
 		}
+		for i := range maxLines {
+			linesInRow[i] += "\n" // ends each line
+		}
+		if !lineBefore && eventsExist {
+			linesInRow = append([]string{"\r" + strings.Repeat("—", r.Terminal.Width) + "\n"}, linesInRow...)
+		}
+		if eventsExist && lineTime.Time != -1 {
+			linesInRow = append(linesInRow, "\r"+strings.Repeat("—", r.Terminal.Width)+"\n")
+			lineBefore = true
+		} else {
+			lineBefore = false
+		}
+		lines = append(lines, linesInRow...)
 	}
-	for i := 0; i < len(lines); i++ {
-		lines[i] += "\n"
-	}
-
 	fmt.Print(strings.Join(lines, ""))
 }
 
@@ -144,9 +189,12 @@ func SideSpacers(input string, length int) string {
 		strings.Repeat(" ", (length-len(input))%2)
 }
 
-func generateTimeLine() []Cell {
-	toRet := []Cell{}
-	for i := 6; i != 5; i++ {
+func generateTimeLine(from, amount int) TimeLine {
+	toRet := TimeLine{
+		Width: 9,
+		Times: []LineTime{},
+	}
+	for i := from; len(toRet.Times) < amount; i++ {
 		if i == 24 {
 			i = 0
 		}
@@ -156,11 +204,14 @@ func generateTimeLine() []Cell {
 		} else {
 			hours = fmt.Sprintf("%d", i)
 		}
-		toRet = append(toRet,
-			Cell{
-				Name:   hours + ":00",
-				Height: 3,
-			})
+		toRet.Times = append(toRet.Times, LineTime{
+			Name: hours + ":00",
+			Time: i,
+		})
 	}
+	toRet.Times = append(toRet.Times, LineTime{
+		Name: "pending",
+		Time: -1,
+	})
 	return toRet
 }
