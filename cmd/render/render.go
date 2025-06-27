@@ -10,13 +10,14 @@ import (
 
 type Renderer struct {
 	Terminal *terminal.TermManager
+	Events   *map[events.Date][]events.Event
 }
 
 type Column struct {
 	Name  string
 	Width int
 	Cells []Cell
-	Day   int
+	Date  events.Date
 }
 
 type Cell struct {
@@ -24,6 +25,7 @@ type Cell struct {
 	Height      int
 	Description string
 	Time        int
+	IsUsed      bool
 }
 
 type LineTime struct {
@@ -58,8 +60,9 @@ func (r *Renderer) RenderColumns(amount int) {
 }
 
 // returns celected cell
-func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn, focusLine int) *Cell {
-	var selectedCell *Cell
+func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn, focusLine int) (Cell, events.Date, int) {
+	var selectedCell Cell
+	var selectedDate events.Date
 
 	dayColumns := []Column{}
 	for i := 0; i < days; i++ {
@@ -67,15 +70,21 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 			Column{
 				Name:  focusDate.AddDays(i - 1).String(),
 				Cells: []Cell{},
-				Day:   focusDate.AddDays(i - 1).Day,
+				Date:  focusDate.AddDays(i - 1),
 			})
 	}
-	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "skibidi", Time: 8})
-	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "skibidii", Time: 8})
-	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "pididi", Time: 8})
-	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "skibidi", Time: 3})
-	dayColumns[3].Cells = append(dayColumns[3].Cells, Cell{Name: "skibidi", Time: 10})
-	dayColumns[4].Cells = append(dayColumns[4].Cells, Cell{Name: "skibidi", Time: 12})
+
+	for columnIndex, column := range dayColumns {
+		eventsMap := *r.Events
+		for _, event := range eventsMap[column.Date] {
+			dayColumns[columnIndex].Cells = append(dayColumns[columnIndex].Cells, Cell{
+				Name:        event.Name,
+				Description: event.Description,
+				Time:        event.Time,
+				IsUsed:      true,
+			})
+		}
+	}
 
 	timeLine := generateTimeLine(6, 20)
 	dedicatedWidth := timeLine.Width // distribue free space between columns without width
@@ -159,6 +168,11 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 			for day := range len(dayColumns) {
 				if len(rowCells[lineTime.Time][day])-1 < line { // nothing in that time in that day in that line
 					if focusLine == rowCounter && focusColumn == day { // +1 because of that later the line before will be printed
+						selectedCell = Cell{
+							IsUsed: false,
+							Time:   lineTime.Time,
+						}
+						selectedDate = dayColumns[day].Date
 						linesInRow[line] += "|" + Inverted(strings.Repeat(" ", dayColumns[day].Width-2)) + "|"
 					} else {
 						linesInRow[line] += "|" + strings.Repeat(" ", dayColumns[day].Width-2) + "|"
@@ -167,7 +181,8 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 				}
 				cell := rowCells[lineTime.Time][day][line]
 				if focusLine == rowCounter && focusColumn == day { // +1 because of that later the line before will be printed
-					selectedCell = &cell
+					selectedCell = cell
+					selectedDate = dayColumns[day].Date
 					linesInRow[line] += "|" + Inverted(SideSpacers(cell.Name, dayColumns[day].Width-2)) + "|"
 				} else {
 					linesInRow[line] += "|" + SideSpacers(cell.Name, dayColumns[day].Width-2) + "|"
@@ -189,9 +204,27 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 		}
 		lines = append(lines, linesInRow...)
 	}
+	for len(lines) < r.Terminal.Height-5 {
+		line := "\r" + strings.Repeat(" ", timeLine.Width)
+		for day, column := range dayColumns {
+			if focusLine == rowCounter && focusColumn == day {
+				selectedCell = Cell{
+					IsUsed: false,
+					Time:   -1,
+				}
+				selectedDate = dayColumns[day].Date
+				line += "|" + Inverted(strings.Repeat(" ", column.Width-2)) + "|"
+			} else {
+				line += "|" + strings.Repeat(" ", column.Width-2) + "|"
+			}
+		}
+		line += "\n"
+		lines = append(lines, line)
+		rowCounter++
+	}
 	ClearAll()
 	fmt.Print(strings.Join(lines, ""))
-	return selectedCell
+	return selectedCell, selectedDate, rowCounter
 }
 
 func SideSpacers(input string, length int) string {

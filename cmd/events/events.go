@@ -1,14 +1,20 @@
 package events
 
 import (
+	"database/sql"
 	"fmt"
 	"time"
 )
 
+type EventManager struct {
+	DbPath string
+	db     *sql.DB
+}
+
 type Event struct {
-	Name        string    `json:"name,omitempty"`
-	Description string    `json:"description,omitempty"`
-	Date        time.Time `json:"date,omitempty"`
+	Name        string `json:"name,omitempty"`
+	Description string `json:"description,omitempty"`
+	Time        int    `json:"time,omitempty"`
 }
 
 type Date struct {
@@ -21,27 +27,8 @@ func (d Date) String() string {
 	return fmt.Sprintf("%d-%s-%d", d.Day, d.Month.String(), d.Year)
 }
 
-var Events = map[Date][]Event{
-	Date{
-		Day:   1,
-		Month: 1,
-	}: []Event{
-		{Name: "workkkkkkkkkkkkkkk",
-			Description: "have to work now on to do app",
-			Date:        time.Now()},
-		{Name: "study",
-			Description: "have to study now on to do app",
-			Date:        time.Now()},
-	},
-	TodayDate(): []Event{
-		{Name: "work",
-			Description: "have to work now on to do app",
-			Date:        time.Now()},
-		{Name: "studyyyyy",
-			Description: "have to study now on to do app",
-			Date:        time.Now()},
-	},
-	// time.Now(): []Event{},
+func (d Date) Int() int64 {
+	return d.ToTime().Unix()
 }
 
 func TodayDate() Date {

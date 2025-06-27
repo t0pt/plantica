@@ -15,6 +15,7 @@ type TermManager struct {
 	Height     int
 	FocusDay   *int
 	FocusLine  *int
+	MaxRows    *int
 	Change     chan bool
 	SizeChange chan os.Signal
 }
@@ -111,7 +112,10 @@ func (ter *TermManager) GetTerminalDimensions() {
 }
 
 func NewTerminal() *TermManager {
-	newTerm := TermManager{}
+	maxRows := 0
+	newTerm := TermManager{
+		MaxRows: &maxRows,
+	}
 	newTerm.GetTerminalDimensions()
 	go func() {
 		for {
@@ -138,17 +142,29 @@ func (ter *TermManager) ChangeSizeDaemon() {
 
 func (ter *TermManager) DownArrow() {
 	*ter.FocusLine = (*ter.FocusLine + 1)
+	if *ter.MaxRows != 0 && *ter.FocusLine > *ter.MaxRows-1 {
+		*ter.FocusLine = *ter.MaxRows - 1
+	}
 	ter.Change <- true
 }
 func (ter *TermManager) UpArrow() {
 	*ter.FocusLine = (*ter.FocusLine - 1)
+	if *ter.FocusLine < 0 {
+		*ter.FocusLine = 0
+	}
 	ter.Change <- true
 }
 func (ter *TermManager) RightArrow() {
 	*ter.FocusDay = (*ter.FocusDay + 1)
+	if *ter.FocusDay > 4 {
+		*ter.FocusDay = 0
+	}
 	ter.Change <- true
 }
 func (ter *TermManager) LeftArrow() {
 	*ter.FocusDay = (*ter.FocusDay - 1)
+	if *ter.FocusDay < 0 {
+		*ter.FocusDay = 4
+	}
 	ter.Change <- true
 }
