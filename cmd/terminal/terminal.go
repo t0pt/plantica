@@ -9,13 +9,14 @@ import (
 )
 
 type TermManager struct {
-	State     bool // true == raw; false == default
-	oldState  *term.State
-	Width     int
-	Height    int
-	FocusDay  *int
-	FocusLine *int
-	Change    chan bool
+	State      bool // true == raw; false == default
+	oldState   *term.State
+	Width      int
+	Height     int
+	FocusDay   *int
+	FocusLine  *int
+	Change     chan bool
+	SizeChange chan os.Signal
 }
 
 func (ter *TermManager) Speak() {
@@ -119,6 +120,20 @@ func NewTerminal() *TermManager {
 		}
 	}()
 	return &newTerm
+}
+
+func (ter *TermManager) ChangeSizeDaemon() {
+	for {
+		<-ter.SizeChange
+		newW, newH, err := term.GetSize(int(os.Stdout.Fd()))
+		if err != nil {
+			fmt.Printf("Error getting size: %v\n", err)
+			continue
+		}
+		ter.Width = newW
+		ter.Height = newH
+		ter.Change <- true
+	}
 }
 
 func (ter *TermManager) DownArrow() {

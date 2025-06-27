@@ -1,6 +1,10 @@
 package main
 
 import (
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/t0pt/plantica/cmd/events"
 	"github.com/t0pt/plantica/cmd/render"
 	"github.com/t0pt/plantica/cmd/terminal"
@@ -8,6 +12,11 @@ import (
 
 func main() {
 	mainTerm := terminal.NewTerminal()
+
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGWINCH)
+	mainTerm.SizeChange = sigc
+	go mainTerm.ChangeSizeDaemon()
 
 	renderer := render.Renderer{
 		Terminal: mainTerm,

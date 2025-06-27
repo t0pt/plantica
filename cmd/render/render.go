@@ -59,7 +59,6 @@ func (r *Renderer) RenderColumns(amount int) {
 
 // returns celected cell
 func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn, focusLine int) *Cell {
-	ClearAll()
 	var selectedCell *Cell
 
 	dayColumns := []Column{}
@@ -190,6 +189,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 		}
 		lines = append(lines, linesInRow...)
 	}
+	ClearAll()
 	fmt.Print(strings.Join(lines, ""))
 	return selectedCell
 }
