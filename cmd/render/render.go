@@ -16,6 +16,7 @@ type Column struct {
 	Name  string
 	Width int
 	Cells []Cell
+	Day   int
 }
 
 type Cell struct {
@@ -43,8 +44,7 @@ func (r *Renderer) RenderSquare() {
 }
 
 func ClearAll() {
-	fmt.Print("\033[2J")
-	fmt.Print("\033[H")
+	fmt.Print("\x1b[H\x1b[3J\x1b[2J")
 }
 
 func (r *Renderer) RenderColumns(amount int) {
@@ -57,10 +57,10 @@ func (r *Renderer) RenderColumns(amount int) {
 	fmt.Print(field)
 }
 
-func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusTime int) {
+// returns celected cell
+func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn, focusLine int) *Cell {
 	ClearAll()
-
-	timeLine := generateTimeLine(6, 20)
+	var selectedCell *Cell
 
 	dayColumns := []Column{}
 	for i := 0; i < days; i++ {
@@ -68,6 +68,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusTime in
 			Column{
 				Name:  focusDate.AddDays(i - 1).String(),
 				Cells: []Cell{},
+				Day:   focusDate.AddDays(i - 1).Day,
 			})
 	}
 	dayColumns[1].Cells = append(dayColumns[1].Cells, Cell{Name: "skibidi", Time: 8})
@@ -77,6 +78,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusTime in
 	dayColumns[3].Cells = append(dayColumns[3].Cells, Cell{Name: "skibidi", Time: 10})
 	dayColumns[4].Cells = append(dayColumns[4].Cells, Cell{Name: "skibidi", Time: 12})
 
+	timeLine := generateTimeLine(6, 20)
 	dedicatedWidth := timeLine.Width // distribue free space between columns without width
 	notDedicatedIds := []int{}
 	for i := 0; i < len(dayColumns); i++ {
@@ -124,6 +126,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusTime in
 	lines = append(lines, line)
 
 	lineBefore := false
+	rowCounter := 0
 	// real business
 	for _, lineTime := range timeLine.Times {
 		if len(lines) >= r.Terminal.Height-1 {
@@ -155,13 +158,23 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusTime in
 				continue
 			}
 			for day := range len(dayColumns) {
-				if len(rowCells[lineTime.Time][day])-1 < line {
-					linesInRow[line] += "|" + strings.Repeat(" ", dayColumns[day].Width-2) + "|"
+				if len(rowCells[lineTime.Time][day])-1 < line { // nothing in that time in that day in that line
+					if focusLine == rowCounter && focusColumn == day { // +1 because of that later the line before will be printed
+						linesInRow[line] += "|" + Inverted(strings.Repeat(" ", dayColumns[day].Width-2)) + "|"
+					} else {
+						linesInRow[line] += "|" + strings.Repeat(" ", dayColumns[day].Width-2) + "|"
+					}
 					continue
 				}
 				cell := rowCells[lineTime.Time][day][line]
-				linesInRow[line] += "|" + SideSpacers(cell.Name, dayColumns[day].Width-2) + "|"
+				if focusLine == rowCounter && focusColumn == day { // +1 because of that later the line before will be printed
+					selectedCell = &cell
+					linesInRow[line] += "|" + Inverted(SideSpacers(cell.Name, dayColumns[day].Width-2)) + "|"
+				} else {
+					linesInRow[line] += "|" + SideSpacers(cell.Name, dayColumns[day].Width-2) + "|"
+				}
 			}
+			rowCounter += 1
 		}
 		for i := range maxLines {
 			linesInRow[i] += "\n" // ends each line
@@ -178,6 +191,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusTime in
 		lines = append(lines, linesInRow...)
 	}
 	fmt.Print(strings.Join(lines, ""))
+	return selectedCell
 }
 
 func SideSpacers(input string, length int) string {
@@ -187,6 +201,10 @@ func SideSpacers(input string, length int) string {
 	return strings.Repeat(" ", int((length-len(input))/2)) + input +
 		strings.Repeat(" ", int((length-len(input))/2)) +
 		strings.Repeat(" ", (length-len(input))%2)
+}
+
+func Inverted(input string) string {
+	return "\x1b[7m" + input + "\x1b[0m"
 }
 
 func generateTimeLine(from, amount int) TimeLine {

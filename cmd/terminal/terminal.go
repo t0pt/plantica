@@ -9,10 +9,13 @@ import (
 )
 
 type TermManager struct {
-	State    bool // true == raw; false == default
-	oldState *term.State
-	Width    int
-	Height   int
+	State     bool // true == raw; false == default
+	oldState  *term.State
+	Width     int
+	Height    int
+	FocusDay  *int
+	FocusLine *int
+	Change    chan bool
 }
 
 func (ter *TermManager) Speak() {
@@ -57,9 +60,13 @@ func (ter *TermManager) Listen() {
 		if buf[0] == 27 && buf[1] == 91 {
 			switch buf[2] {
 			case 65:
+				ter.UpArrow()
 			case 66:
+				ter.DownArrow()
 			case 67:
+				ter.RightArrow()
 			case 68:
+				ter.LeftArrow()
 			}
 		} else {
 			if buf[0] == 27 && buf[1] == 0 && buf[2] == 0 { // ESC
@@ -112,4 +119,21 @@ func NewTerminal() *TermManager {
 		}
 	}()
 	return &newTerm
+}
+
+func (ter *TermManager) DownArrow() {
+	*ter.FocusLine = (*ter.FocusLine + 1)
+	ter.Change <- true
+}
+func (ter *TermManager) UpArrow() {
+	*ter.FocusLine = (*ter.FocusLine - 1)
+	ter.Change <- true
+}
+func (ter *TermManager) RightArrow() {
+	*ter.FocusDay = (*ter.FocusDay + 1)
+	ter.Change <- true
+}
+func (ter *TermManager) LeftArrow() {
+	*ter.FocusDay = (*ter.FocusDay - 1)
+	ter.Change <- true
 }

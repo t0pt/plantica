@@ -12,8 +12,19 @@ func main() {
 	renderer := render.Renderer{
 		Terminal: mainTerm,
 	}
-	today := events.TodayDate()
-	renderer.RenderCalendar(5, &today, 0)
+	focusDay := 1
+	focusLine := 5
+	focusDate := events.TodayDate().AddDays(0)
+	mainTerm.FocusDay = &focusDay
+	mainTerm.FocusLine = &focusLine
+	change := make(chan bool)
+	mainTerm.Change = change
+	go func() {
+		for {
+			renderer.RenderCalendar(5, &focusDate, focusDay, focusLine)
+			<-change
+		}
+	}()
 	mainTerm.EnableRaw()
 	mainTerm.Listen()
 	mainTerm.DisableRaw()
