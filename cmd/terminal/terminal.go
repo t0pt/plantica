@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/t0pt/plantica/cmd/events"
 	"golang.org/x/term"
 )
 
@@ -13,6 +14,7 @@ type TermManager struct {
 	oldState   *term.State
 	Width      int
 	Height     int
+	FocusDate  *events.Date
 	FocusDay   *int
 	FocusLine  *int
 	MaxRows    *int
@@ -157,14 +159,16 @@ func (ter *TermManager) UpArrow() {
 func (ter *TermManager) RightArrow() {
 	*ter.FocusDay = (*ter.FocusDay + 1)
 	if *ter.FocusDay > 4 {
-		*ter.FocusDay = 0
+		*ter.FocusDay = 4
+		*ter.FocusDate = ter.FocusDate.AddDays(1)
 	}
 	ter.Change <- true
 }
 func (ter *TermManager) LeftArrow() {
 	*ter.FocusDay = (*ter.FocusDay - 1)
 	if *ter.FocusDay < 0 {
-		*ter.FocusDay = 4
+		*ter.FocusDay = 0
+		*ter.FocusDate = ter.FocusDate.AddDays(-1)
 	}
 	ter.Change <- true
 }

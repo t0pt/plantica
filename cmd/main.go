@@ -1,7 +1,6 @@
 package main
 
 import (
-	"fmt"
 	"os"
 	"os/signal"
 	"syscall"
@@ -22,6 +21,7 @@ func main() {
 	focusDay := 1
 	focusLine := 5
 	focusDate := events.TodayDate().AddDays(0)
+	mainTerm.FocusDate = &focusDate
 	mainTerm.FocusDay = &focusDay
 	mainTerm.FocusLine = &focusLine
 
@@ -34,18 +34,16 @@ func main() {
 	}
 	eventManager.Connect()
 	defer eventManager.CloseConnection()
-	eventManager.GetEvents(events.TodayDate().AddDays(-1), events.TodayDate().AddDays(3), &Events)
 
 	renderer := render.Renderer{
 		Terminal: mainTerm,
 		Events:   &Events,
+		EManager: &eventManager,
 	}
 	go func() {
 		for {
-			cell, date, maxRows := renderer.RenderCalendar(5, &focusDate, focusDay, focusLine)
+			_, _, maxRows := renderer.RenderCalendar(5, &focusDate, focusDay, focusLine, true)
 			*mainTerm.MaxRows = maxRows
-			fmt.Print("\r", cell, "\n")
-			fmt.Print("\r", date, "\n")
 			<-change
 		}
 	}()

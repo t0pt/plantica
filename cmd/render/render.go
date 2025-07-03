@@ -11,6 +11,8 @@ import (
 type Renderer struct {
 	Terminal *terminal.TermManager
 	Events   *map[events.Date][]events.Event
+	EManager *events.EventManager
+	lastDate events.Date
 }
 
 type Column struct {
@@ -38,29 +40,12 @@ type TimeLine struct {
 	Width int
 }
 
-func (r *Renderer) RenderSquare() {
-	ClearAll()
-	fmt.Print(strings.Repeat("-", r.Terminal.Width) + "\n")
-	fmt.Print(strings.Repeat("\r|"+strings.Repeat(" ", r.Terminal.Width-2)+"|\n", r.Terminal.Height-3))
-	fmt.Print("\r" + strings.Repeat("-", r.Terminal.Width) + "\n")
-}
-
 func ClearAll() {
 	fmt.Print("\x1b[H\x1b[3J\x1b[2J")
 }
 
-func (r *Renderer) RenderColumns(amount int) {
-	ClearAll()
-	columnWindth := int(r.Terminal.Width / amount)
-	column := "|" + strings.Repeat(" ", columnWindth-2) + "|"
-	line := "\r" + strings.Repeat(column, amount) + "\n"
-	field := strings.Repeat(line, r.Terminal.Height)
-
-	fmt.Print(field)
-}
-
 // returns celected cell
-func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn, focusLine int) (Cell, events.Date, int) {
+func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn, focusLine int, footer bool) (Cell, events.Date, int) {
 	var selectedCell Cell
 	var selectedDate events.Date
 
@@ -72,6 +57,11 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 				Cells: []Cell{},
 				Date:  focusDate.AddDays(i - 1),
 			})
+	}
+
+	if r.lastDate != *focusDate {
+		r.lastDate = *focusDate
+		r.EManager.GetEvents(focusDate.AddDays(-1), focusDate.AddDays(days-1), r.Events)
 	}
 
 	for columnIndex, column := range dayColumns {
@@ -126,18 +116,23 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 	lines := []string{}
 	line := "\r|" + strings.Repeat(" ", timeLine.Width-2) + "|" // header
 	for _, column := range dayColumns {
-		line += "|" + SideSpacers(column.Name, column.Width-2) + "|"
+		line += "|" + sideSpacers(column.Name, column.Width-2) + "|"
 	}
 	line += "\n"
 	lines = append(lines, line)
 	line = "\r" + strings.Repeat("—", r.Terminal.Width) + "\n" // divider
 	lines = append(lines, line)
 
-	lineBefore := false
-	rowCounter := 0
+	footerLines := []string{}
+	if footer {
+		footerLines = r.Footer(2)
+	}
+
+	lineBefore := false // if the event before that one has already generated a separation line
+	rowCounter := 0     // how many rows with (potential) events are there
 	// real business
 	for _, lineTime := range timeLine.Times {
-		if len(lines) >= r.Terminal.Height-1 {
+		if len(lines) >= r.Terminal.Height-len(footerLines)-1 {
 			break
 		}
 		maxLines := 1 // max events in one time
@@ -153,7 +148,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 		linesInRow := make([]string, 0, maxLines)
 		for i := range maxLines {
 			if i == 0 {
-				linesInRow = append(linesInRow, "\r|"+SideSpacers(lineTime.Name, timeLine.Width-2)+"|") // starts with linetime
+				linesInRow = append(linesInRow, "\r|"+sideSpacers(lineTime.Name, timeLine.Width-2)+"|") // starts with linetime
 			} else {
 				linesInRow = append(linesInRow, "\r"+strings.Repeat(" ", timeLine.Width))
 			}
@@ -173,7 +168,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 							Time:   lineTime.Time,
 						}
 						selectedDate = dayColumns[day].Date
-						linesInRow[line] += "|" + Inverted(strings.Repeat(" ", dayColumns[day].Width-2)) + "|"
+						linesInRow[line] += "|" + inverted(strings.Repeat(" ", dayColumns[day].Width-2)) + "|"
 					} else {
 						linesInRow[line] += "|" + strings.Repeat(" ", dayColumns[day].Width-2) + "|"
 					}
@@ -183,9 +178,9 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 				if focusLine == rowCounter && focusColumn == day { // +1 because of that later the line before will be printed
 					selectedCell = cell
 					selectedDate = dayColumns[day].Date
-					linesInRow[line] += "|" + Inverted(SideSpacers(cell.Name, dayColumns[day].Width-2)) + "|"
+					linesInRow[line] += "|" + inverted(sideSpacers(cell.Name, dayColumns[day].Width-2)) + "|"
 				} else {
-					linesInRow[line] += "|" + SideSpacers(cell.Name, dayColumns[day].Width-2) + "|"
+					linesInRow[line] += "|" + sideSpacers(cell.Name, dayColumns[day].Width-2) + "|"
 				}
 			}
 			rowCounter += 1
@@ -204,7 +199,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 		}
 		lines = append(lines, linesInRow...)
 	}
-	for len(lines) < r.Terminal.Height-5 {
+	for len(lines) < r.Terminal.Height-len(footerLines)-1 {
 		line := "\r" + strings.Repeat(" ", timeLine.Width)
 		for day, column := range dayColumns {
 			if focusLine == rowCounter && focusColumn == day {
@@ -213,7 +208,7 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 					Time:   -1,
 				}
 				selectedDate = dayColumns[day].Date
-				line += "|" + Inverted(strings.Repeat(" ", column.Width-2)) + "|"
+				line += "|" + inverted(strings.Repeat(" ", column.Width-2)) + "|"
 			} else {
 				line += "|" + strings.Repeat(" ", column.Width-2) + "|"
 			}
@@ -224,10 +219,45 @@ func (r *Renderer) RenderCalendar(days int, focusDate *events.Date, focusColumn,
 	}
 	ClearAll()
 	fmt.Print(strings.Join(lines, ""))
+	fmt.Print(strings.Join(footerLines, ""))
 	return selectedCell, selectedDate, rowCounter
 }
 
-func SideSpacers(input string, length int) string {
+// space represents the minimum amount of space between footer items
+func (r *Renderer) Footer(space int) []string {
+	lines := make([]string, 0, 2)
+	line := []string{}
+
+	length := 0
+	for _, content := range footerContent {
+		if length+len(content) < r.Terminal.Width { // the line still has free space
+			line = append(line, content)
+			length += len(content) + space
+		} else { // new line should be created
+			length -= len(line) * space
+			freeSpace := r.Terminal.Width - length
+			if len(line) > 1 {
+				lines = append(lines, "\r"+strings.Join(line, strings.Repeat(" ", int(freeSpace/(len(line)-1))))+"\n")
+			} else {
+				lines = append(lines, "\r"+line[0]+"\n")
+			}
+			line = []string{content}
+			length = len(content) + space
+		}
+	}
+	if len(line) != 0 {
+		length -= len(line) * space
+		freeSpace := r.Terminal.Width - length
+		if len(line) > 1 {
+			lines = append(lines, "\r"+strings.Join(line, strings.Repeat(" ", int(freeSpace/(len(line)-1))))+"\n")
+		} else {
+			lines = append(lines, "\r"+line[0]+"\n")
+		}
+	}
+	return lines
+}
+
+func sideSpacers(input string, length int) string {
 	if len(input) >= length {
 		return input[:length]
 	}
@@ -236,7 +266,7 @@ func SideSpacers(input string, length int) string {
 		strings.Repeat(" ", (length-len(input))%2)
 }
 
-func Inverted(input string) string {
+func inverted(input string) string {
 	return "\x1b[7m" + input + "\x1b[0m"
 }
 
@@ -265,4 +295,10 @@ func generateTimeLine(from, amount int) TimeLine {
 		Time: -1,
 	})
 	return toRet
+}
+
+var footerContent []string = []string{
+	"Navigate-" + inverted("Arrows"),
+	"New event-" + inverted("ENTER"),
+	"Exit-" + inverted("Ctrl+C"),
 }
